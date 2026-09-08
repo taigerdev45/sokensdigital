@@ -201,7 +201,7 @@ export function ImageUploadField({
           <ImagePlus className="size-3.5 text-white" />
         </span>
       </button>
-      <input ref={inputRef} type="file" accept="image/*" onChange={handleFile} className="hidden" />
+      <input ref={inputRef} type="file" accept=".png,.jpg,.jpeg,.webp,.gif" onChange={handleFile} className="hidden" />
       {error && <p className="max-w-20 text-center text-[0.6rem] leading-tight text-destructive">{error}</p>}
     </div>
   );

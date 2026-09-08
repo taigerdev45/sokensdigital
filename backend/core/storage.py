@@ -15,34 +15,86 @@ logger = logging.getLogger(__name__)
 
 BUCKET_NAME = 'site-content'
 MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5 Mo — pre-compression, checked on the raw upload
-ALLOWED_CONTENT_TYPES = {'image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', 'image/gif'}
 # Uploaded screenshots/photos routinely arrive at several megabytes and
 # full camera resolution — nothing on this site is ever displayed larger
 # than this, and serving the original made every page agonizingly slow.
 MAX_IMAGE_DIMENSION = 1920
-# Formats Pillow would silently mangle if we tried to recompress them —
-# SVG isn't a raster format at all, GIF loses its animation to a single
-# frame. Both pass through untouched.
-PASSTHROUGH_CONTENT_TYPES = {'image/svg+xml', 'image/gif'}
 
 MAX_VIDEO_UPLOAD_SIZE = 25 * 1024 * 1024  # 25 Mo — short demo clips only, not full-length video
-ALLOWED_VIDEO_CONTENT_TYPES = {'video/mp4', 'video/webm', 'video/quicktime'}
-
 MAX_FILE_UPLOAD_SIZE = 20 * 1024 * 1024  # 20 Mo — matches the chat-attachment cap from the (now unused) storage.rules
+
+# ---------------------------------------------------------------------------
+# Types de fichiers : l'extension décide, jamais le client
+# ---------------------------------------------------------------------------
+# `UploadedFile.content_type` est l'en-tête multipart envoyé par le
+# navigateur. Django ne le valide pas et ne le dérive pas du contenu : c'est
+# une valeur que l'émetteur choisit. Les fonctions ci-dessous validaient
+# pourtant contre lui, puis le renvoyaient tel quel à Supabase comme
+# Content-Type de stockage — donc l'émetteur décidait aussi de la façon dont
+# son fichier serait servi plus tard, depuis un bucket public.
+#
+# On inverse : l'extension du nom détermine le type, via ces tables, et
+# l'en-tête client n'est jamais consulté. Un type absent de la table ne peut
+# être ni accepté ni servi.
+#
+# image/svg+xml n'y figure plus. Un SVG est un document scriptable, pas une
+# image : servi inline depuis le bucket public, il exécute son script sur
+# l'origine Supabase du projet. Il n'existe pas de façon sûre de servir du
+# SVG déposé par un utilisateur depuis une origine qui compte, sauf à le
+# désinfecter — ce que ce module ne fait pas. Les logos vectoriels du site
+# vitrine restent servis depuis les fichiers statiques du dépôt frontend.
+IMAGE_MIME_BY_EXTENSION = {
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp',
+    # GIF traverse sans recompression (Pillow n'en garderait qu'une image),
+    # mais ce n'est pas un format scriptable.
+    '.gif': 'image/gif',
+}
+
+VIDEO_MIME_BY_EXTENSION = {
+    '.mp4': 'video/mp4',
+    '.webm': 'video/webm',
+    '.mov': 'video/quicktime',
+}
+
 # Pièces jointes chat — documents/images usuels uniquement. Pas d'exécutables,
 # scripts, HTML (vecteur XSS/malware si le lien Cloudinary est cliqué par un
 # collègue qui fait confiance au domaine). Étendre à la demande plutôt que
 # l'inverse si un usage légitime bloqué est signalé.
-ALLOWED_CHAT_ATTACHMENT_TYPES = {
-    'image/png', 'image/jpeg', 'image/webp', 'image/gif',
-    'application/pdf',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'text/plain', 'text/csv',
-    'application/zip',
+CHAT_ATTACHMENT_MIME_BY_EXTENSION = {
+    **IMAGE_MIME_BY_EXTENSION,
+    '.pdf': 'application/pdf',
+    '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.txt': 'text/plain',
+    '.csv': 'text/csv',
+    '.zip': 'application/zip',
 }
+
+# Formats que Pillow abîmerait à la recompression : ils traversent tels quels.
+# Exprimé en extensions et non en types déclarés, pour la même raison.
+PASSTHROUGH_EXTENSIONS = {'.gif'}
+
+
+def _resolve_upload_type(file, mime_by_extension: dict[str, str]) -> tuple[str, str]:
+    """Renvoie (extension, type MIME) déduits du nom, ou lève ValidationError.
+
+    Le message d'erreur cite l'extension et non le type déclaré : c'est
+    l'extension qui décide désormais, autant que le refus le dise.
+    """
+    extension = os.path.splitext(file.name or '')[1].lower()
+    content_type = mime_by_extension.get(extension)
+    if content_type is None:
+        autorisees = ', '.join(sorted(mime_by_extension))
+        raise ValidationError(
+            f'Type de fichier non autorisé : « {extension or file.name} ». '
+            f'Extensions acceptées : {autorisees}.'
+        )
+    return extension, content_type
 
 _bucket_ensured = False
 
@@ -115,17 +167,27 @@ def _cloudinary_configure() -> None:
     cloudinary.config(cloud_name=cloud_name, api_key=api_key, api_secret=api_secret, secure=True)
 
 
-def _upload_to_cloudinary(data: bytes, folder: str) -> str:
+def _upload_to_cloudinary(data: bytes, folder: str, extension: str = '') -> str:
     """Uploads to Cloudinary, returns its public (secure) URL. Kept separate
     from Supabase's _upload_bytes — user-driven traffic (avatars, chat
     attachments) is deliberately routed here instead, since the Supabase
     project is already over its free-tier egress quota. resource_type='auto'
     lets Cloudinary route images/videos/arbitrary files correctly without
-    us tracking the distinction here."""
+    us tracking the distinction here.
+
+    `extension` est celle validée par _resolve_upload_type, jamais celle du
+    nom d'origine. Cloudinary sert un fichier « raw » avec le type déduit de
+    l'extension du public_id : la laisser vide, comme avant, revenait à lui
+    faire deviner le type depuis les octets d'un fichier que l'utilisateur
+    a choisi.
+    """
     _cloudinary_configure()
     try:
         result = cloudinary.uploader.upload(
-            io.BytesIO(data), folder=folder, public_id=str(uuid.uuid4()), resource_type='auto',
+            io.BytesIO(data),
+            folder=folder,
+            public_id=f'{uuid.uuid4()}{extension}',
+            resource_type='auto',
         )
     except Exception as exc:
         raise RuntimeError(f"Échec de l'upload vers Cloudinary : {exc}")
@@ -134,18 +196,18 @@ def _upload_to_cloudinary(data: bytes, folder: str) -> str:
 
 def upload_avatar(file) -> str:
     """Uploads a profile photo to Cloudinary, returns its public URL.
-    Same validation/resize pipeline as upload_image (see ALLOWED_CONTENT_TYPES,
-    _resize_and_compress) — only the destination differs."""
-    if file.content_type not in ALLOWED_CONTENT_TYPES:
-        raise ValidationError(f'Type de fichier non autorisé : {file.content_type}.')
+    Same validation/resize pipeline as upload_image (see
+    IMAGE_MIME_BY_EXTENSION, _resize_and_compress) — only the destination
+    differs."""
+    extension, _content_type = _resolve_upload_type(file, IMAGE_MIME_BY_EXTENSION)
     if file.size > MAX_UPLOAD_SIZE:
         raise ValidationError('Le fichier dépasse la taille maximale autorisée (5 Mo).')
 
-    if file.content_type in PASSTHROUGH_CONTENT_TYPES:
-        return _upload_to_cloudinary(file.read(), 'avatars')
+    if extension in PASSTHROUGH_EXTENSIONS:
+        return _upload_to_cloudinary(file.read(), 'avatars', extension)
 
-    data, _content_type, _extension = _resize_and_compress(file)
-    return _upload_to_cloudinary(data, 'avatars')
+    data, _recompressed_type, recompressed_extension = _resize_and_compress(file)
+    return _upload_to_cloudinary(data, 'avatars', recompressed_extension)
 
 
 def upload_image(file, folder: str) -> str:
@@ -154,41 +216,38 @@ def upload_image(file, folder: str) -> str:
     django.core.exceptions.ValidationError for oversized/wrong-type/corrupt
     files (the view turns that into a 400) — never silently accepts a bad
     file. Resized/recompressed before upload — see _resize_and_compress."""
-    if file.content_type not in ALLOWED_CONTENT_TYPES:
-        raise ValidationError(f'Type de fichier non autorisé : {file.content_type}.')
+    extension, content_type = _resolve_upload_type(file, IMAGE_MIME_BY_EXTENSION)
     if file.size > MAX_UPLOAD_SIZE:
         raise ValidationError('Le fichier dépasse la taille maximale autorisée (5 Mo).')
 
-    if file.content_type in PASSTHROUGH_CONTENT_TYPES:
-        extension = os.path.splitext(file.name)[1] or '.png'
-        return _upload_bytes(file.read(), file.content_type, extension, folder)
+    if extension in PASSTHROUGH_EXTENSIONS:
+        return _upload_bytes(file.read(), content_type, extension, folder)
 
-    data, content_type, extension = _resize_and_compress(file)
-    return _upload_bytes(data, content_type, extension, folder)
+    # Après recompression, le type et l'extension viennent de Pillow, donc
+    # du serveur : ils remplacent ceux déduits du nom.
+    data, recompressed_type, recompressed_extension = _resize_and_compress(file)
+    return _upload_bytes(data, recompressed_type, recompressed_extension, folder)
 
 
 def upload_video(file, folder: str) -> str:
     """Same as upload_image, but for the short demo clips used as a
-    project's video_src — bigger size cap, video content-types only."""
-    if file.content_type not in ALLOWED_VIDEO_CONTENT_TYPES:
-        raise ValidationError(f'Type de fichier non autorisé : {file.content_type}.')
+    project's video_src — bigger size cap, video extensions only."""
+    extension, content_type = _resolve_upload_type(file, VIDEO_MIME_BY_EXTENSION)
     if file.size > MAX_VIDEO_UPLOAD_SIZE:
         raise ValidationError('Le fichier dépasse la taille maximale autorisée (25 Mo).')
-    extension = os.path.splitext(file.name)[1] or '.mp4'
-    return _upload_bytes(file.read(), file.content_type, extension, folder)
+    return _upload_bytes(file.read(), content_type, extension, folder)
 
 
 def upload_file(file, folder: str) -> str:
     """Uploads a chat attachment (documents/images, not arbitrary files) to
     Cloudinary and returns its public URL. Type-restricted to
-    ALLOWED_CHAT_ATTACHMENT_TYPES — un fichier authentifié uploadé n'est pas
-    pour autant un fichier de confiance ; un exécutable/script partagé en
+    CHAT_ATTACHMENT_MIME_BY_EXTENSION — un fichier authentifié uploadé n'est
+    pas pour autant un fichier de confiance ; un exécutable/script partagé en
     pièce jointe piège les collègues qui font confiance au lien."""
-    if file.content_type not in ALLOWED_CHAT_ATTACHMENT_TYPES:
-        raise ValidationError(f'Type de fichier non autorisé : {file.content_type}.')
+    extension, _content_type = _resolve_upload_type(file, CHAT_ATTACHMENT_MIME_BY_EXTENSION)
     if file.size > MAX_FILE_UPLOAD_SIZE:
         raise ValidationError('Le fichier dépasse la taille maximale autorisée (20 Mo).')
-    return _upload_to_cloudinary(file.read(), folder)
+    return _upload_to_cloudinary(file.read(), folder, extension)
 
 
 def _upload_bytes(data: bytes, content_type: str, extension: str, folder: str) -> str:

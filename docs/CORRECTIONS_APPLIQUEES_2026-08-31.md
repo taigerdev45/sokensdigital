@@ -172,3 +172,60 @@ jointes et les règles de montant des versements).
 
 Ces tests ne sont plus une réserve dormante : la CI les exécute désormais à
 chaque push.
+
+---
+
+# Suite — 03/09/2026 : le même défaut sur les chemins d'upload publics
+
+La correction du 03/09 sur les pièces justificatives fermait le type MIME
+contrôlé par le client **sur le seul chemin qui avait été relu**. Une revue de
+qualité menée ensuite a montré que le même défaut restait ouvert sur les
+chemins voisins, et que ceux-ci sont plus exposés : ils écrivent dans le
+bucket **public** `site-content`, sans URL signée, sans TTL, sans
+`Content-Disposition: attachment`.
+
+`upload_image`, `upload_video`, `upload_avatar` et `upload_file` validaient
+tous contre `file.content_type` — l'en-tête multipart choisi par l'émetteur —
+puis le renvoyaient tel quel comme type de stockage. L'émetteur décidait donc
+aussi de la façon dont son fichier serait servi ensuite.
+
+**Le SVG était le cas le plus direct.** `image/svg+xml` figurait dans les types
+acceptés *et* dans les formats traversant sans recompression : un SVG était
+stocké exactement tel que déposé, puis servi inline depuis l'origine Supabase
+du projet. Un SVG est un document scriptable, pas une image — aucune
+tricherie n'était nécessaire, c'était le comportement nominal.
+
+## Ce qui change
+
+Le principe posé pour le bucket privé est désormais celui de tout le module :
+**l'extension du nom détermine le type, via une table serveur, et l'en-tête
+client n'est jamais consulté.** Trois tables (`IMAGE_MIME_BY_EXTENSION`,
+`VIDEO_MIME_BY_EXTENSION`, `CHAT_ATTACHMENT_MIME_BY_EXTENSION`) remplacent les
+ensembles de types déclarés. Une extension absente ne peut être ni acceptée ni
+servie.
+
+`image/svg+xml` n'est plus accepté. Il n'existe pas de façon sûre de servir du
+SVG déposé par un utilisateur depuis une origine qui compte, sauf à le
+désinfecter — ce que ce module ne fait pas et ne devrait pas improviser. Les
+logos vectoriels du site vitrine restent servis depuis les fichiers statiques
+du dépôt frontend. **C'est un changement fonctionnel :** l'upload d'un SVG
+échoue désormais avec un message qui liste les extensions acceptées.
+
+Côté Cloudinary, le `public_id` porte maintenant l'extension validée. Un
+fichier « raw » y est servi avec le type déduit de cette extension ; la laisser
+vide revenait à faire deviner le type à partir des octets d'un fichier choisi
+par l'utilisateur.
+
+Les sélecteurs de fichiers du frontend passent de `accept="image/*"` — qui
+propose le SVG — aux extensions réellement acceptées, pour que le refus ne
+survienne pas après coup.
+
+## Ce qui reste à faire, et que je ne peux pas faire
+
+**Les SVG déjà présents dans le bucket `site-content` restent servis et restent
+exécutables.** La correction empêche les nouveaux dépôts ; elle ne nettoie pas
+l'existant. Il faut lister le bucket et retirer ou remplacer les objets `.svg`
+qui s'y trouvent. Cela demande un accès à la console Supabase du projet.
+
+Tant que ce nettoyage n'est pas fait, un SVG hostile déjà déposé reste
+exploitable exactement comme avant.

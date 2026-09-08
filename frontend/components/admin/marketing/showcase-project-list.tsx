@@ -96,7 +96,7 @@ function VideoUploadField({ value, onChange }: { value: string; onChange: (url: 
           <X className="size-3.5" />
         </button>
       )}
-      <input ref={inputRef} type="file" accept="video/mp4,video/webm,video/quicktime" onChange={handleFile} className="hidden" />
+      <input ref={inputRef} type="file" accept=".mp4,.webm,.mov" onChange={handleFile} className="hidden" />
       {error && <p className="text-[0.6rem] text-destructive">{error}</p>}
     </div>
   );
