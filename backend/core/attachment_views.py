@@ -45,11 +45,11 @@ logger = logging.getLogger(__name__)
 ATTACHABLE_MODELS = {
     'finance.payment': [*FINANCE_ROLES, ROLE_COMPTABLE],
     'finance.invoice': [*FINANCE_ROLES, ROLE_COMPTABLE],
-    'finance.quote': [*FINANCE_ROLES, ROLE_COMPTABLE],
+    'marketing.quote': [*FINANCE_ROLES, ROLE_COMPTABLE],
     'treasury.cashentry': [*FINANCE_ROLES, ROLE_COMPTABLE, ROLE_CAISSIER],
     'treasury.bankentry': [*FINANCE_ROLES, ROLE_COMPTABLE],
     'treasury.capitalcontribution': [*FINANCE_ROLES],
-    'procurement.disbursementrequest': [*FINANCE_ROLES, ROLE_COMPTABLE, ROLE_CAISSIER],
+    'finance.disbursementrequest': [*FINANCE_ROLES, ROLE_COMPTABLE, ROLE_CAISSIER],
     'procurement.procurementrequest': [*FINANCE_ROLES, ROLE_COMPTABLE, *MANAGEMENT_ROLES],
     'procurement.supplierinvoice': [*FINANCE_ROLES, ROLE_COMPTABLE],
 }
@@ -121,7 +121,17 @@ class DocumentAttachmentViewSet(viewsets.ModelViewSet):
             )
 
         app_label, model = label.split('.', 1)
-        content_type = get_object_or_404(ContentType, app_label=app_label, model=model)
+        # get_by_natural_key passe par le cache de ContentType propre au
+        # processus ; un get() ordinaire refait la requete a chaque appel.
+        # Le label vient de l'allowlist, donc son absence est une erreur de
+        # configuration, pas une requete invalide.
+        try:
+            content_type = ContentType.objects.get_by_natural_key(app_label, model)
+        except ContentType.DoesNotExist:
+            logger.error('ATTACHABLE_MODELS reference un modele inconnu : %s', label)
+            raise serializers.ValidationError(
+                {'content_type': f"Modele « {label} » introuvable."}
+            )
 
         # L'objet doit exister : sans cette vérification, l'endpoint accepte
         # des pièces orphelines rattachées à un identifiant inventé.

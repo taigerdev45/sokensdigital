@@ -46,6 +46,12 @@ ALLOWED_CHAT_ATTACHMENT_TYPES = {
 
 _bucket_ensured = False
 
+# Les appels Supabase passaient par les fonctions de module `requests.*`, qui
+# ouvrent une connexion neuve a chaque fois : DNS, TCP et TLS repayes par
+# requete. Une Session reutilise la connexion keep-alive, ce qui compte
+# d'autant plus que signer une URL est un aller-retour par piece affichee.
+_session = requests.Session()
+
 
 def _supabase_config() -> tuple[str, str]:
     url = os.environ.get('SUPABASE_URL')
@@ -65,7 +71,7 @@ def _ensure_bucket() -> None:
         return
     url, key = _supabase_config()
     headers = {'Authorization': f'Bearer {key}', 'apikey': key}
-    response = requests.post(
+    response = _session.post(
         f'{url}/storage/v1/bucket',
         json={'id': BUCKET_NAME, 'name': BUCKET_NAME, 'public': True},
         headers=headers, timeout=10,
@@ -190,7 +196,7 @@ def _upload_bytes(data: bytes, content_type: str, extension: str, folder: str) -
     url, key = _supabase_config()
     path = f'{folder}/{uuid.uuid4()}{extension}'
 
-    response = requests.post(
+    response = _session.post(
         f'{url}/storage/v1/object/{BUCKET_NAME}/{path}',
         headers={
             'Authorization': f'Bearer {key}',
@@ -228,14 +234,16 @@ SIGNED_URL_TTL_SECONDS = 300
 # lien signe le servait alors en text/html, et le script s'executait sur
 # l'origine Supabase du projet.
 #
-# Les cles couvrent DOCUMENT_ATTACHMENT_ALLOWED_EXTENSIONS ; toute extension
-# hors de cette liste est deja rejetee en amont par le validateur.
-MIME_BY_EXTENSION = {
-    '.pdf': 'application/pdf',
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-}
+# La table vit dans core.models, d'ou le validateur d'extensions se deduit :
+# une extension est autorisee parce qu'on sait la servir sans risque, pas
+# l'inverse. Import differe pour ne pas charger les modeles a l'import de ce
+# module (storage est importe tot, models ne l'est pas encore partout).
+def _mime_for_extension(extension: str) -> str:
+    from core.models import DOCUMENT_ATTACHMENT_MIME_BY_EXTENSION
+
+    return DOCUMENT_ATTACHMENT_MIME_BY_EXTENSION.get(
+        extension, 'application/octet-stream',
+    )
 
 _private_bucket_ensured = False
 
@@ -247,7 +255,7 @@ def _ensure_private_bucket() -> None:
     url, key = _supabase_config()
     headers = {'Authorization': f'Bearer {key}', 'apikey': key}
 
-    response = requests.post(
+    response = _session.post(
         f'{url}/storage/v1/bucket',
         headers=headers,
         json={'name': PRIVATE_BUCKET_NAME, 'id': PRIVATE_BUCKET_NAME, 'public': False},
@@ -263,7 +271,7 @@ def _ensure_private_bucket() -> None:
         # protegent plus rien face a un listing. Rien dans l'application ne
         # le signalerait : l'upload reussit, l'URL signee fonctionne.
         # On verifie donc l'etat reel avant de continuer.
-        bucket = requests.get(
+        bucket = _session.get(
             f'{url}/storage/v1/bucket/{PRIVATE_BUCKET_NAME}',
             headers=headers,
             timeout=15,
@@ -298,7 +306,7 @@ class SupabasePrivateStorage(Storage):
 
     def _open(self, name, mode='rb'):
         url, key = _supabase_config()
-        response = requests.get(
+        response = _session.get(
             f'{url}/storage/v1/object/{PRIVATE_BUCKET_NAME}/{name}',
             headers={'Authorization': f'Bearer {key}', 'apikey': key},
             timeout=30,
@@ -319,14 +327,14 @@ class SupabasePrivateStorage(Storage):
         path = f'{uuid.uuid4()}{extension}'
 
         content.seek(0)
-        response = requests.post(
+        response = _session.post(
             f'{url}/storage/v1/object/{PRIVATE_BUCKET_NAME}/{path}',
             headers={
                 'Authorization': f'Bearer {key}',
                 'apikey': key,
                 # Derive de l'extension, jamais de content.content_type :
-                # voir MIME_BY_EXTENSION.
-                'Content-Type': MIME_BY_EXTENSION.get(extension, 'application/octet-stream'),
+                # voir _mime_for_extension.
+                'Content-Type': _mime_for_extension(extension),
                 # Interdit d'ecraser un objet existant. Les chemins sont des
                 # UUID donc la collision est theorique, mais l'ecrasement
                 # d'une piece comptable ne doit pas dependre de ca.
@@ -341,7 +349,7 @@ class SupabasePrivateStorage(Storage):
 
     def delete(self, name):
         url, key = _supabase_config()
-        requests.delete(
+        _session.delete(
             f'{url}/storage/v1/object/{PRIVATE_BUCKET_NAME}/{name}',
             headers={'Authorization': f'Bearer {key}', 'apikey': key},
             timeout=15,
@@ -355,7 +363,7 @@ class SupabasePrivateStorage(Storage):
 
     def size(self, name):
         url, key = _supabase_config()
-        response = requests.head(
+        response = _session.head(
             f'{url}/storage/v1/object/{PRIVATE_BUCKET_NAME}/{name}',
             headers={'Authorization': f'Bearer {key}', 'apikey': key},
             timeout=15,
@@ -363,9 +371,23 @@ class SupabasePrivateStorage(Storage):
         return int(response.headers.get('Content-Length', 0))
 
     def url(self, name):
-        """URL signée, valable SIGNED_URL_TTL_SECONDS."""
+        """URL signée, valable SIGNED_URL_TTL_SECONDS.
+
+        Mise en cache un peu moins longtemps que sa validite. Signer est un
+        aller-retour HTTP bloquant, et le serializer appelle cette methode
+        une fois par piece affichee : sans cache, lister dix justificatifs
+        coutait dix allers-retours en serie, refaits a chaque rafraichissement
+        de l'ecran. Le cache les ramene a un par fichier et par fenetre.
+        """
+        from django.core.cache import cache
+
+        cache_key = f'supabase:signed-url:{name}'
+        cached = cache.get(cache_key)
+        if cached:
+            return cached
+
         url, key = _supabase_config()
-        response = requests.post(
+        response = _session.post(
             f'{url}/storage/v1/object/sign/{PRIVATE_BUCKET_NAME}/{name}',
             headers={'Authorization': f'Bearer {key}', 'apikey': key},
             # `download` fait repondre Supabase en Content-Disposition:
@@ -377,4 +399,9 @@ class SupabasePrivateStorage(Storage):
         )
         if response.status_code != 200:
             raise RuntimeError(f"Impossible de signer l'URL du justificatif : {response.text}")
-        return f"{url}/storage/v1{response.json()['signedURL']}"
+
+        signed = f"{url}/storage/v1{response.json()['signedURL']}"
+        # Marge de 60 s : une URL servie juste avant l'expiration du cache
+        # doit rester valable le temps que le navigateur la suive.
+        cache.set(cache_key, signed, SIGNED_URL_TTL_SECONDS - 60)
+        return signed

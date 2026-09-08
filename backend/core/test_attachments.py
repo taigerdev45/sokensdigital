@@ -1,7 +1,3 @@
-import os
-from unittest import mock
-
-from django.test import TestCase
 """Endpoint des pieces justificatives (core/attachment_views.py).
 
 L'enjeu teste ici n'est pas le CRUD mais l'autorisation : une
@@ -9,14 +5,23 @@ GenericForeignKey non bridee laisse rattacher un fichier a n'importe quelle
 ligne de n'importe quelle table, puis la relire.
 """
 
+import os
+from unittest import mock
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
-from core.constants import ROLE_ADMIN, ROLE_COMPTABLE, ROLE_DEVELOPER
-from core.models import DocumentAttachment, Role, User
-from finance.models import Invoice
+from core.constants import (
+    ROLE_ADMIN, ROLE_CAISSIER, ROLE_COMPTABLE, ROLE_DEVELOPER,
+)
+from core.models import (
+    DOCUMENT_ATTACHMENT_ALLOWED_EXTENSIONS,
+    DOCUMENT_ATTACHMENT_MIME_BY_EXTENSION,
+    DocumentAttachment, Role, User,
+)
+from finance.models import Invoice, Payment
 
 
 def _pdf(name='justificatif.pdf'):
@@ -25,7 +30,14 @@ def _pdf(name='justificatif.pdf'):
     return SimpleUploadedFile(name, b'%PDF-1.4\n%%EOF\n', content_type='application/pdf')
 
 
-class DocumentAttachmentTests(APITestCase):
+class AttachmentFixturesMixin:
+    """Comptable, admin, developpeur, facture cible et URL de collection.
+
+    Un mixin plutot qu'une classe de base porteuse de tests : en heritant de
+    DocumentAttachmentTests, la classe de securite aurait rejoue ses huit
+    tests pour la seule reutilisation du setUp.
+    """
+
     def setUp(self):
         self.comptable = User.objects.create(email='compta@sokens.test')
         self.comptable.roles.add(Role.objects.get_or_create(name=ROLE_COMPTABLE)[0])
@@ -51,6 +63,8 @@ class DocumentAttachmentTests(APITestCase):
         data.update(overrides)
         return data
 
+
+class DocumentAttachmentTests(AttachmentFixturesMixin, APITestCase):
     def test_accountant_uploads_and_lists(self):
         self.client.force_authenticate(user=self.comptable)
 
@@ -144,22 +158,17 @@ class DocumentAttachmentTests(APITestCase):
         self.assertEqual(DocumentAttachment.objects.count(), 0)
 
 
-class DocumentAttachmentSecurityTests(APITestCase):
-    """Regressions issues de la revue de securite du 03/09/2026."""
+class DocumentAttachmentSecurityTests(AttachmentFixturesMixin, APITestCase):
+    """Regressions issues de la revue de securite du 03/09/2026.
+
+    Reprend les fixtures du mixin et n'ajoute que le caissier, dont le
+    perimetre est l'objet du premier test.
+    """
 
     def setUp(self):
-        from core.constants import ROLE_CAISSIER
-
-        self.comptable = User.objects.create(email='sec-compta@sokens.test')
-        self.comptable.roles.add(Role.objects.get_or_create(name=ROLE_COMPTABLE)[0])
-
+        super().setUp()
         self.caissier = User.objects.create(email='sec-caisse@sokens.test')
         self.caissier.roles.add(Role.objects.get_or_create(name=ROLE_CAISSIER)[0])
-
-        self.invoice = Invoice.objects.create(
-            client_name='Client Test', amount_ht=100000, issue_date='2026-01-15',
-        )
-        self.list_url = reverse('attachment-list')
 
     def test_caissier_cannot_reach_client_payment_documents(self):
         """Le perimetre du Caissier s'arrete a la caisse.
@@ -167,8 +176,6 @@ class DocumentAttachmentSecurityTests(APITestCase):
         L'endpoint `encaissements` lui refuse deja banque et versements
         clients ; les pieces de finance.payment le lui rouvraient.
         """
-        from finance.models import Payment
-
         payment = Payment.objects.create(
             invoice=self.invoice, amount=1000, payment_date='2026-01-20',
             payment_method='CHEQUE',
@@ -189,30 +196,77 @@ class DocumentAttachmentSecurityTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('object_id', response.data)
 
-    def test_stored_content_type_comes_from_the_extension_not_the_client(self):
-        """Un PDF annonce en text/html ne doit pas etre stocke en text/html.
+    def test_every_allowlisted_label_resolves_to_a_real_model(self):
+        """Les cles de ATTACHABLE_MODELS sont des chaines saisies a la main.
 
-        Sinon le lien signe le sert tel quel et le script s'execute sur
-        l'origine Supabase.
+        Deux d'entre elles ne designaient aucun modele (`finance.quote`, dont
+        le modele vit dans marketing, et `procurement.disbursementrequest`,
+        qui vit dans finance) : des lignes mortes qui se lisaient comme une
+        politique en vigueur.
         """
-        from core.storage import MIME_BY_EXTENSION
+        from django.apps import apps
 
-        self.assertEqual(MIME_BY_EXTENSION['.pdf'], 'application/pdf')
-        # Aucune valeur de la table ne peut faire executer du script.
-        for mime in MIME_BY_EXTENSION.values():
-            self.assertNotIn('html', mime)
-            self.assertNotIn('javascript', mime)
-            self.assertNotIn('svg', mime)
+        from core.attachment_views import ATTACHABLE_MODELS
 
-    def test_every_allowed_extension_has_a_server_side_mime(self):
-        """Une extension acceptee sans entree dans la table retomberait sur
-        application/octet-stream — le lien deviendrait inutilisable en
-        silence."""
-        from core.models import DOCUMENT_ATTACHMENT_ALLOWED_EXTENSIONS
-        from core.storage import MIME_BY_EXTENSION
+        for label in ATTACHABLE_MODELS:
+            app_label, model = label.split('.', 1)
+            with self.subTest(label=label):
+                apps.get_model(app_label, model)
 
-        for extension in DOCUMENT_ATTACHMENT_ALLOWED_EXTENSIONS:
-            self.assertIn(f'.{extension}', MIME_BY_EXTENSION)
+
+class AttachmentMimeTableTests(TestCase):
+    """La table extension -> MIME est la source unique.
+
+    Le type servi au telechargement en est deduit cote serveur, et la liste
+    des extensions acceptees s'en derive : une extension est autorisee parce
+    qu'on sait la servir sans risque.
+    """
+
+    def test_no_executable_mime_can_be_served(self):
+        for mime in DOCUMENT_ATTACHMENT_MIME_BY_EXTENSION.values():
+            with self.subTest(mime=mime):
+                self.assertNotIn('html', mime)
+                self.assertNotIn('javascript', mime)
+                self.assertNotIn('svg', mime)
+
+    def test_allowed_extensions_derive_from_the_table(self):
+        self.assertEqual(
+            sorted(DOCUMENT_ATTACHMENT_ALLOWED_EXTENSIONS),
+            sorted(e.lstrip('.') for e in DOCUMENT_ATTACHMENT_MIME_BY_EXTENSION),
+        )
+
+
+class PrivateStorageUploadTests(TestCase):
+    """`_save` ne doit jamais repercuter le type declare par le client.
+
+    Un PDF annonce en text/html, stocke tel quel, etait servi en text/html
+    par le lien signe — le script s'executait alors sur l'origine Supabase.
+    """
+
+    def setUp(self):
+        import core.storage as storage
+
+        self.storage = storage
+        storage._private_bucket_ensured = True  # court-circuite la creation
+        self.addCleanup(setattr, storage, '_private_bucket_ensured', False)
+        self.env = mock.patch.dict(os.environ, {
+            'SUPABASE_URL': 'https://projet.supabase.co',
+            'SUPABASE_SERVICE_ROLE_KEY': 'cle-de-test',
+        })
+        self.env.start()
+        self.addCleanup(self.env.stop)
+
+    def test_content_type_is_derived_from_the_extension(self):
+        hostile = SimpleUploadedFile(
+            'facture.pdf', b'<script>alert(1)</script>', content_type='text/html',
+        )
+        posted = mock.Mock(status_code=200)
+
+        with mock.patch.object(self.storage._session, 'post', return_value=posted) as post:
+            self.storage.SupabasePrivateStorage()._save('facture.pdf', hostile)
+
+        self.assertEqual(post.call_args.kwargs['headers']['Content-Type'], 'application/pdf')
+        self.assertEqual(post.call_args.kwargs['headers']['x-upsert'], 'false')
 
 
 class PrivateBucketGuardTests(TestCase):
@@ -228,6 +282,7 @@ class PrivateBucketGuardTests(TestCase):
         import core.storage as storage
 
         self.storage = storage
+        self.addCleanup(setattr, storage, '_private_bucket_ensured', False)
         storage._private_bucket_ensured = False
         self.env = mock.patch.dict(os.environ, {
             'SUPABASE_URL': 'https://projet.supabase.co',
@@ -235,17 +290,19 @@ class PrivateBucketGuardTests(TestCase):
         })
         self.env.start()
         self.addCleanup(self.env.stop)
-        self.addCleanup(setattr, storage, '_private_bucket_ensured', False)
+
+    def _ensure(self, get_status=200, public=False):
+        """Rejoue le cas nominal — bucket deja cree — avec l'etat renvoye."""
+        create = mock.Mock(status_code=400, text='Bucket already exists')
+        get = mock.Mock(status_code=get_status)
+        get.json.return_value = {'name': 'documents', 'public': public}
+
+        with mock.patch.object(self.storage._session, 'post', return_value=create),              mock.patch.object(self.storage._session, 'get', return_value=get):
+            self.storage._ensure_private_bucket()
 
     def test_refuses_to_use_an_existing_public_bucket(self):
-        create = mock.Mock(status_code=400, text='Bucket already exists')
-        get = mock.Mock(status_code=200)
-        get.json.return_value = {'name': 'documents', 'public': True}
-
-        with mock.patch.object(self.storage.requests, 'post', return_value=create), \
-             mock.patch.object(self.storage.requests, 'get', return_value=get):
-            with self.assertRaises(RuntimeError) as caught:
-                self.storage._ensure_private_bucket()
+        with self.assertRaises(RuntimeError) as caught:
+            self._ensure(public=True)
 
         self.assertIn('public', str(caught.exception))
         # L'echec ne doit pas etre memorise comme un succes : le prochain
@@ -253,21 +310,9 @@ class PrivateBucketGuardTests(TestCase):
         self.assertFalse(self.storage._private_bucket_ensured)
 
     def test_accepts_an_existing_private_bucket(self):
-        create = mock.Mock(status_code=400, text='Bucket already exists')
-        get = mock.Mock(status_code=200)
-        get.json.return_value = {'name': 'documents', 'public': False}
-
-        with mock.patch.object(self.storage.requests, 'post', return_value=create), \
-             mock.patch.object(self.storage.requests, 'get', return_value=get):
-            self.storage._ensure_private_bucket()
-
+        self._ensure(public=False)
         self.assertTrue(self.storage._private_bucket_ensured)
 
     def test_refuses_when_the_bucket_can_be_neither_created_nor_read(self):
-        create = mock.Mock(status_code=400, text='Bucket already exists')
-        get = mock.Mock(status_code=404)
-
-        with mock.patch.object(self.storage.requests, 'post', return_value=create), \
-             mock.patch.object(self.storage.requests, 'get', return_value=get):
-            with self.assertRaises(RuntimeError):
-                self.storage._ensure_private_bucket()
+        with self.assertRaises(RuntimeError):
+            self._ensure(get_status=404)
