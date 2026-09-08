@@ -4,7 +4,8 @@ import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { Plus } from "lucide-react";
-import { ADMIN_SECTIONS, SECTION_ICONS, SECTION_SHORT_LABELS, findNavMatch, filterSectionsByAccess } from "@/lib/admin-nav";
+import { ADMIN_SECTIONS, SECTION_ICONS, SECTION_SHORT_LABELS, findNavMatch, filterSectionsByAccess, type NavSection } from "@/lib/admin-nav";
+import { MobileSectionSheet } from "@/components/admin/mobile-section-sheet";
 import { useAuth } from "@/lib/auth/auth-context";
 import { usePermissions } from "@/lib/admin/permissions-context";
 import { ROLE_QUICK_ACTIONS, type QuickAction } from "@/lib/admin/role-quick-actions";
@@ -46,16 +47,27 @@ export function MobileBottomNav() {
   const { canAccessModule } = usePermissions();
   const sections = filterSectionsByAccess(ADMIN_SECTIONS, canAccessModule);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [openSection, setOpenSection] = useState<NavSection | null>(null);
   // Reset during render on navigation rather than in an effect — avoids a
   // flash of the fan-out menu still open on the page it was triggered from.
   const [lastPathname, setLastPathname] = useState(pathname);
   if (pathname !== lastPathname) {
     setLastPathname(pathname);
     setActionsOpen(false);
+    setOpenSection(null);
   }
 
-  const activeSectionTitle = findNavMatch(pathname, sections)?.section.title ?? null;
+  const match = findNavMatch(pathname, sections);
+  const activeSectionTitle = match?.section.title ?? null;
   const quickActions = ROLE_QUICK_ACTIONS[profile?.role ?? "AUTRE"];
+
+  /** Un département n'ayant qu'un ecran n'a rien a lister : on y va
+   * directement plutot que d'imposer un panneau a un seul choix. */
+  function handleSectionTap(section: NavSection) {
+    setActionsOpen(false);
+    if (section.items.length === 1) router.push(section.items[0].href);
+    else setOpenSection(section);
+  }
 
   function handleQuickAction(action: QuickAction) {
     setActionsOpen(false);
@@ -86,6 +98,12 @@ export function MobileBottomNav() {
         </filter>
       </svg>
 
+      <MobileSectionSheet
+        section={openSection}
+        activeItemHref={match?.item.href ?? null}
+        onClose={() => setOpenSection(null)}
+      />
+
       <nav className="fixed inset-x-0 bottom-0 z-40 lg:hidden">
         <div className="relative border-t border-neutral-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md">
           <div className="grid" style={{ gridTemplateColumns: `repeat(${sections.length}, minmax(0, 1fr))` }}>
@@ -95,9 +113,15 @@ export function MobileBottomNav() {
               return (
                 <button
                   key={section.title}
-                  onClick={() => router.push(section.items[0].href)}
+                  onClick={() => handleSectionTap(section)}
+                  aria-haspopup={section.items.length > 1 ? "dialog" : undefined}
+                  aria-expanded={
+                    section.items.length > 1 ? openSection?.title === section.title : undefined
+                  }
                   className={cn(
-                    "flex flex-col items-center gap-1 px-0.5 py-2.5 transition-colors",
+                    // min-h-14 : cible tactile d'au moins 44px, le py-2.5
+                    // seul laissait des boutons trop bas pour le pouce.
+                    "flex min-h-14 flex-col items-center justify-center gap-1 px-0.5 py-2 transition-colors",
                     isActive ? "text-primary" : "text-neutral-400"
                   )}
                 >

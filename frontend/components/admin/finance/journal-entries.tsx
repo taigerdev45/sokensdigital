@@ -90,24 +90,26 @@ export function JournalEntries() {
               </div>
               {entry.is_locked && <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-xs text-neutral-600">Période clôturée</span>}
             </div>
-            <table className="w-full text-xs">
-              <thead className="text-left text-neutral-400 uppercase">
-                <tr>
-                  <th className="py-1 font-medium">Compte</th>
-                  <th className="py-1 font-medium text-right">Débit</th>
-                  <th className="py-1 font-medium text-right">Crédit</th>
-                </tr>
-              </thead>
-              <tbody>
-                {entry.lines.map((line) => (
-                  <tr key={line.id} className="border-t border-neutral-100">
-                    <td className="py-1.5 text-neutral-700">{line.account_code} — {line.account_name}</td>
-                    <td className="py-1.5 text-right text-neutral-900">{line.debit !== "0.00" ? line.debit : ""}</td>
-                    <td className="py-1.5 text-right text-neutral-900">{line.credit !== "0.00" ? line.credit : ""}</td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="text-left text-neutral-400 uppercase">
+                  <tr>
+                    <th className="py-1 font-medium">Compte</th>
+                    <th className="py-1 font-medium text-right">Débit</th>
+                    <th className="py-1 font-medium text-right">Crédit</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {entry.lines.map((line) => (
+                    <tr key={line.id} className="border-t border-neutral-100">
+                      <td className="py-1.5 text-neutral-700">{line.account_code} — {line.account_name}</td>
+                      <td className="py-1.5 text-right text-neutral-900">{line.debit !== "0.00" ? line.debit : ""}</td>
+                      <td className="py-1.5 text-right text-neutral-900">{line.credit !== "0.00" ? line.credit : ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         ))}
         {entries.length === 0 && <p className="py-8 text-center text-sm text-neutral-400">Aucune écriture pour l&apos;instant.</p>}

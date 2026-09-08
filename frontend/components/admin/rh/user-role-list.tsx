@@ -126,100 +126,102 @@ export function UserRoleList() {
           )}
         </div>
 
-        <table className="w-full text-sm">
-          <thead className="bg-neutral-50 text-left text-[11px] font-semibold tracking-wide text-neutral-500 uppercase">
-            <tr>
-              <th className="px-5 py-3">Utilisateur</th>
-              <th className="px-5 py-3">Rôle</th>
-              <th className="px-5 py-3">Département</th>
-              <th className="w-9 px-5 py-3" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-neutral-100">
-            {filtered.map((row, index) => (
-              <tr key={row.djangoId} data-tour={index === 0 ? "module-rh-utilisateurs" : undefined}>
-                <td className="px-5 py-3.5">
-                  <span className="flex items-center gap-3">
-                    <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-neutral-100 text-[11px] font-semibold text-neutral-600">
-                      {row.avatarUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- Cloudinary URL, not a local/optimizable asset
-                        <img src={row.avatarUrl} alt="" className="size-full object-cover" />
-                      ) : (
-                        initials(row.name || row.email)
-                      )}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-neutral-50 text-left text-[11px] font-semibold tracking-wide text-neutral-500 uppercase">
+              <tr>
+                <th className="px-5 py-3">Utilisateur</th>
+                <th className="px-5 py-3">Rôle</th>
+                <th className="px-5 py-3">Département</th>
+                <th className="w-9 px-5 py-3" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-100">
+              {filtered.map((row, index) => (
+                <tr key={row.djangoId} data-tour={index === 0 ? "module-rh-utilisateurs" : undefined}>
+                  <td className="px-5 py-3.5">
+                    <span className="flex items-center gap-3">
+                      <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-neutral-100 text-[11px] font-semibold text-neutral-600">
+                        {row.avatarUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- Cloudinary URL, not a local/optimizable asset
+                          <img src={row.avatarUrl} alt="" className="size-full object-cover" />
+                        ) : (
+                          initials(row.name || row.email)
+                        )}
+                      </span>
+                      <span>
+                        <span className="block font-medium text-neutral-900">{row.name || "—"}</span>
+                        <span className="block text-xs text-neutral-400">{row.email}</span>
+                      </span>
                     </span>
-                    <span>
-                      <span className="block font-medium text-neutral-900">{row.name || "—"}</span>
-                      <span className="block text-xs text-neutral-400">{row.email}</span>
-                    </span>
-                  </span>
-                </td>
-                <td className="px-5 py-3.5">
-                  {row.role ? (
-                    <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-semibold text-neutral-700">
-                      {ROLE_LABELS[row.role]}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-neutral-400">—</span>
-                  )}
-                </td>
-                <td className="px-5 py-3.5 text-neutral-500">
-                  {row.departmentId ? departmentNameById.get(row.departmentId) ?? "—" : "—"}
-                </td>
-                <td className="px-5 py-3.5">
-                  {row.role ? (
-                    <Popover>
-                      <PopoverTrigger
-                        render={
-                          <button
-                            type="button"
-                            className="flex size-7 items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
-                          >
-                            <MoreHorizontal className="size-4" />
-                          </button>
-                        }
-                      />
-                      <PopoverContent className="w-40 p-1" align="end">
-                        <UserEditModal
-                          user={row}
-                          onSaved={load}
-                          trigger={
+                  </td>
+                  <td className="px-5 py-3.5">
+                    {row.role ? (
+                      <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-semibold text-neutral-700">
+                        {ROLE_LABELS[row.role]}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-neutral-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-5 py-3.5 text-neutral-500">
+                    {row.departmentId ? departmentNameById.get(row.departmentId) ?? "—" : "—"}
+                  </td>
+                  <td className="px-5 py-3.5">
+                    {row.role ? (
+                      <Popover>
+                        <PopoverTrigger
+                          render={
                             <button
                               type="button"
-                              className="block w-full rounded-lg px-2.5 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-50"
+                              className="flex size-7 items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
                             >
-                              Modifier l&apos;utilisateur
+                              <MoreHorizontal className="size-4" />
                             </button>
                           }
                         />
-                      </PopoverContent>
-                    </Popover>
-                  ) : (
-                    <AddEmployeeSheet
-                      onCreated={load}
-                      initialIdentity={{ firstName: row.firstName, lastName: row.lastName, email: row.email }}
-                      trigger={
-                        <button
-                          type="button"
-                          className="rounded-full bg-neutral-900 px-3 py-1 text-xs font-semibold text-white hover:bg-neutral-700"
-                        >
-                          Provisionner
-                        </button>
-                      }
-                    />
-                  )}
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-neutral-400">
-                  {rows.length === 0 ? "Aucun utilisateur pour l'instant." : "Aucun résultat."}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                        <PopoverContent className="w-40 p-1" align="end">
+                          <UserEditModal
+                            user={row}
+                            onSaved={load}
+                            trigger={
+                              <button
+                                type="button"
+                                className="block w-full rounded-lg px-2.5 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-50"
+                              >
+                                Modifier l&apos;utilisateur
+                              </button>
+                            }
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    ) : (
+                      <AddEmployeeSheet
+                        onCreated={load}
+                        initialIdentity={{ firstName: row.firstName, lastName: row.lastName, email: row.email }}
+                        trigger={
+                          <button
+                            type="button"
+                            className="rounded-full bg-neutral-900 px-3 py-1 text-xs font-semibold text-white hover:bg-neutral-700"
+                          >
+                            Provisionner
+                          </button>
+                        }
+                      />
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-8 text-center text-neutral-400">
+                    {rows.length === 0 ? "Aucun utilisateur pour l'instant." : "Aucun résultat."}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

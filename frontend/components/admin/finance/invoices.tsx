@@ -80,7 +80,7 @@ export function Invoices() {
         </p>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-neutral-200 shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-neutral-200 shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-neutral-50 text-left text-xs text-neutral-500 uppercase">
             <tr>
