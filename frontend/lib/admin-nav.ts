@@ -39,6 +39,11 @@ export interface NavItem {
    * this item out of the nav (and block direct URL access) for a role
    * whose Role.permissions doesn't include it. */
   moduleKey: string;
+  /** Libellé court, pour l'arc de navigation mobile : les bulles y sont
+   * disposées en cercle autour de l'icône du département, et un nom comme
+   * « Rapprochement bancaire » y recouvre ses voisins. Facultatif — sans
+   * lui, `label` est utilisé tel quel. */
+  shortLabel?: string;
   /** Optional sub-grouping within a section — rendered as a small
    * secondary heading in the sidebar (e.g. "RH" items inside the
    * "Administration" section). Purely cosmetic, doesn't affect
@@ -58,7 +63,7 @@ export const ADMIN_SECTIONS: NavSection[] = [
   {
     title: "Général",
     items: [
-      { label: "Tableau de bord", href: "/admin", icon: LayoutDashboard, moduleKey: "dashboard" },
+      { label: "Tableau de bord", shortLabel: "Dashboard", href: "/admin", icon: LayoutDashboard, moduleKey: "dashboard" },
       { label: "Messagerie", href: "/admin/messagerie", icon: MessageSquare, moduleKey: "messagerie" },
     ],
   },
@@ -66,12 +71,12 @@ export const ADMIN_SECTIONS: NavSection[] = [
     title: "Administration",
     items: [
       { label: "Clients", href: "/admin/rh/clients", icon: Contact2, moduleKey: "clients" },
-      { label: "Utilisateurs & Rôles", href: "/admin/rh/utilisateurs", icon: UserCog, moduleKey: "utilisateurs" },
+      { label: "Utilisateurs & Rôles", shortLabel: "Utilisateurs", href: "/admin/rh/utilisateurs", icon: UserCog, moduleKey: "utilisateurs" },
       { label: "Audit Log", href: "/admin/rh/audit-log", icon: ScrollText, moduleKey: "audit-log" },
       // RH — sous-interface d'Administration, regroupée visuellement dans
       // la sidebar (voir AdminSidebar) plutôt qu'être son propre
       // département de premier niveau.
-      { label: "Tableau de bord", href: "/admin/rh/dashboard", icon: LayoutDashboard, moduleKey: "rh-dashboard", group: "RH" },
+      { label: "Tableau de bord", shortLabel: "Dashboard", href: "/admin/rh/dashboard", icon: LayoutDashboard, moduleKey: "rh-dashboard", group: "RH" },
       { label: "Employés", href: "/admin/rh", icon: Users, moduleKey: "employes", group: "RH" },
       { label: "Départements", href: "/admin/rh/departements", icon: Building2, moduleKey: "departements", group: "RH" },
     ],
@@ -80,35 +85,35 @@ export const ADMIN_SECTIONS: NavSection[] = [
     title: "Marketing & Commercial",
     items: [
       { label: "Dashboard", href: "/admin/marketing/dashboard", icon: LayoutDashboard, moduleKey: "marketing-dashboard" },
-      { label: "Gestion de contenu", href: "/admin/marketing/blog", icon: Newspaper, moduleKey: "contenu" },
-      { label: "Plan Éditorial", href: "/admin/marketing/plan-editorial", icon: CalendarClock, moduleKey: "plan-editorial" },
-      { label: "Tunnel commercial", href: "/admin/marketing/leads", icon: Target, moduleKey: "leads" },
+      { label: "Gestion de contenu", shortLabel: "Contenu", href: "/admin/marketing/blog", icon: Newspaper, moduleKey: "contenu" },
+      { label: "Plan Éditorial", shortLabel: "Éditorial", href: "/admin/marketing/plan-editorial", icon: CalendarClock, moduleKey: "plan-editorial" },
+      { label: "Tunnel commercial", shortLabel: "Tunnel", href: "/admin/marketing/leads", icon: Target, moduleKey: "leads" },
       { label: "Devis", href: "/admin/marketing/devis", icon: FileText, moduleKey: "devis" },
-      { label: "Cahier des charges", href: "/admin/marketing/cahier-des-charges", icon: ClipboardList, moduleKey: "cahier-des-charges" },
+      { label: "Cahier des charges", shortLabel: "Cahier", href: "/admin/marketing/cahier-des-charges", icon: ClipboardList, moduleKey: "cahier-des-charges" },
     ],
   },
   {
     title: "Technique",
     items: [
-      { label: "Gestion de projet", href: "/admin/technique/projets", icon: FolderKanban, moduleKey: "projets" },
+      { label: "Gestion de projet", shortLabel: "Projets", href: "/admin/technique/projets", icon: FolderKanban, moduleKey: "projets" },
       { label: "Timesheets", href: "/admin/technique/timesheets", icon: Clock, moduleKey: "timesheets" },
       { label: "Maintenance", href: "/admin/technique/maintenance", icon: Wrench, moduleKey: "maintenance" },
       { label: "Décaissements", href: "/admin/technique/decaissements", icon: Banknote, moduleKey: "decaissements" },
       { label: "Devis", href: "/admin/technique/devis", icon: FileText, moduleKey: "devis" },
-      { label: "Cahier des charges", href: "/admin/technique/cahier-des-charges", icon: ClipboardList, moduleKey: "cahier-des-charges" },
+      { label: "Cahier des charges", shortLabel: "Cahier", href: "/admin/technique/cahier-des-charges", icon: ClipboardList, moduleKey: "cahier-des-charges" },
     ],
   },
   {
     title: "Finance & Comptabilité",
     items: [
       { label: "Analytique", href: "/admin/finance/dashboard", icon: PieChart, moduleKey: "finance-dashboard" },
-      { label: "Clôture comptable", href: "/admin/finance/cloture", icon: Lock, moduleKey: "cloture" },
+      { label: "Clôture comptable", shortLabel: "Clôture", href: "/admin/finance/cloture", icon: Lock, moduleKey: "cloture" },
       { label: "Grand Livre", href: "/admin/finance/grand-livre", icon: BookOpen, moduleKey: "grand-livre" },
       { label: "Facturation", href: "/admin/finance/facturation", icon: Receipt, moduleKey: "facturation" },
       { label: "Encaissements", href: "/admin/finance/encaissements", icon: ArrowDownToLine, moduleKey: "encaissements" },
-      { label: "Rapprochement bancaire", href: "/admin/finance/rapprochement", icon: Landmark, moduleKey: "rapprochement" },
-      { label: "Fiscalité (TVA)", href: "/admin/finance/tva", icon: Percent, moduleKey: "tva" },
-      { label: "Opérations d'achats", href: "/admin/finance/achats", icon: ShoppingCart, moduleKey: "achats" },
+      { label: "Rapprochement bancaire", shortLabel: "Rappro.", href: "/admin/finance/rapprochement", icon: Landmark, moduleKey: "rapprochement" },
+      { label: "Fiscalité (TVA)", shortLabel: "TVA", href: "/admin/finance/tva", icon: Percent, moduleKey: "tva" },
+      { label: "Opérations d'achats", shortLabel: "Achats", href: "/admin/finance/achats", icon: ShoppingCart, moduleKey: "achats" },
       { label: "Trésorerie", href: "/admin/finance/tresorerie", icon: Wallet, moduleKey: "tresorerie" },
     ],
   },
@@ -116,7 +121,7 @@ export const ADMIN_SECTIONS: NavSection[] = [
     title: "Support Client",
     items: [
       { label: "Tickets", href: "/admin/support/tickets", icon: Headset, moduleKey: "tickets" },
-      { label: "Base de connaissances", href: "/admin/support/base-connaissances", icon: Library, moduleKey: "base-connaissances" },
+      { label: "Base de connaissances", shortLabel: "Connaissances", href: "/admin/support/base-connaissances", icon: Library, moduleKey: "base-connaissances" },
     ],
   },
   {

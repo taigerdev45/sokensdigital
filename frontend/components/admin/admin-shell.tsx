@@ -26,8 +26,17 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     if (hydrated) localStorage.setItem(STORAGE_KEY, collapsed ? "1" : "0");
   }, [collapsed, hydrated]);
 
+  // `min-h-dvh` et non `min-h-screen` : `100vh` est figé à la hauteur du
+  // viewport barre d'URL déployée, donc dès qu'elle se rétracte le contenu
+  // s'arrête avant le bas de l'écran et laisse voir le fond sombre du body —
+  // la bande noire sous la barre de navigation. `dvh` suit la hauteur
+  // réellement visible.
+  //
+  // Le fond blanc est porté ici en plus du <main> pour que le shell couvre
+  // toute la colonne, y compris le dépassement du rebond de défilement iOS,
+  // où le body sombre affleurait également.
   return (
-    <div className="flex min-h-screen w-full print:block">
+    <div className="flex min-h-dvh w-full bg-white print:block">
       <div className="print:hidden">
         <DepartmentRail />
         <AdminSidebar collapsed={collapsed} />
