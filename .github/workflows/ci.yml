@@ -87,13 +87,31 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # Lue depuis frontend/.nvmrc plutot qu'ecrite ici : la version de
+          # Node devient une donnee du depot, partagee par la CI et les
+          # postes de dev, au lieu d'une constante dupliquee qui derive.
+          #
+          # Node 20 echouait a l'installation : @napi-rs/lzma-linux-x64-gnu
+          # exige ^22.20 || ^24.12 || >=25. Le paquet est specifique a
+          # linux-x64, donc npm l'ignore sous Windows et l'installe sur le
+          # runner — la panne n'apparaissait qu'en CI. Node 20 est de toute
+          # facon en fin de support depuis avril 2026.
+          node-version-file: frontend/.nvmrc
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm ci
+        # La sortie est remontee en annotation d'echec : les logs bruts d'un
+        # job demandent les droits admin sur le depot, alors que les
+        # annotations sont lisibles par tous. Sans ca, un npm ci casse ne
+        # laisse voir que « exit code 1 ».
+        run: |
+          set -o pipefail
+          if ! npm ci 2>&1 | tee /tmp/npm-ci.log; then
+            echo "::error::npm ci a echoue : $(head -n 12 /tmp/npm-ci.log | tr -s '[:space:]' ' ')"
+            exit 1
+          fi
 
       - name: Type check
         working-directory: frontend

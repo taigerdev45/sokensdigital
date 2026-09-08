@@ -99,7 +99,7 @@ export function MultiImageUploadField({
         </p>
       )}
       {error && <p className="mt-1.5 text-xs text-destructive">{error}</p>}
-      <input ref={inputRef} type="file" accept="image/*" multiple onChange={handleFiles} className="hidden" />
+      <input ref={inputRef} type="file" accept=".png,.jpg,.jpeg,.webp,.gif" multiple onChange={handleFiles} className="hidden" />
     </div>
   );
 }

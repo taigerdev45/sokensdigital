@@ -336,7 +336,7 @@ function StampUploadField({ value, onChange }: { value: string; onChange: (url: 
           {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
         </div>
       </div>
-      <input ref={inputRef} type="file" accept="image/*" onChange={handleFile} className="hidden" />
+      <input ref={inputRef} type="file" accept=".png,.jpg,.jpeg,.webp,.gif" onChange={handleFile} className="hidden" />
     </div>
   );
 }

@@ -106,7 +106,7 @@ export function ProfileSheet() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept=".png,.jpg,.jpeg,.webp,.gif"
                 onChange={handleFileChange}
                 className="hidden"
               />

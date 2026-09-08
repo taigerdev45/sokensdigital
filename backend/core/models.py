@@ -251,7 +251,21 @@ class Notification(LoggedModel):
 # ni de HTML. Pas encore d'endpoint d'upload câblé sur ce modèle à ce jour,
 # mais les validators sont posés dès maintenant pour que le premier endpoint
 # qui l'utilisera hérite d'une contrainte plutôt que d'un champ ouvert.
-DOCUMENT_ATTACHMENT_ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png']
+#
+# Le type MIME servi au telechargement est deduit de l'extension, cote
+# serveur (`UploadedFile.content_type` est l'en-tete envoye par le client :
+# Django ne le valide pas). Cette table est donc la source unique : une
+# extension est autorisee *parce qu'on sait la servir sans risque*, et la
+# liste des extensions permises s'en deduit au lieu d'etre maintenue a cote.
+DOCUMENT_ATTACHMENT_MIME_BY_EXTENSION = {
+    '.pdf': 'application/pdf',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+}
+DOCUMENT_ATTACHMENT_ALLOWED_EXTENSIONS = [
+    extension.lstrip('.') for extension in DOCUMENT_ATTACHMENT_MIME_BY_EXTENSION
+]
 DOCUMENT_ATTACHMENT_MAX_SIZE = 10 * 1024 * 1024  # 10 Mo
 
 

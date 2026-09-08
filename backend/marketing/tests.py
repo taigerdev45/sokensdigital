@@ -730,7 +730,7 @@ class PublicQuoteAcceptViewTests(APITestCase):
 
     @patch('core.storage._bucket_ensured', False)
     @patch.dict('os.environ', {'SUPABASE_URL': 'https://test-project.supabase.co', 'SUPABASE_SERVICE_ROLE_KEY': 'test-key'})
-    @patch('core.storage.requests.post')
+    @patch('core.storage._session.post')
     def test_accept_sets_signed_at_ip_and_signature(self, mock_post):
         mock_post.side_effect = [
             Mock(status_code=200, text='{}'),  # bucket ensure
@@ -770,7 +770,7 @@ class PublicQuoteAcceptViewTests(APITestCase):
 
     @patch('core.storage._bucket_ensured', False)
     @patch.dict('os.environ', {'SUPABASE_URL': 'https://test-project.supabase.co', 'SUPABASE_SERVICE_ROLE_KEY': 'test-key'})
-    @patch('core.storage.requests.post')
+    @patch('core.storage._session.post')
     def test_accepting_twice_is_idempotent(self, mock_post):
         mock_post.side_effect = [
             Mock(status_code=200, text='{}'),
@@ -948,7 +948,7 @@ class ImageUploadViewTests(APITestCase):
 
     @patch('core.storage._bucket_ensured', False)
     @patch.dict('os.environ', {'SUPABASE_URL': 'https://test-project.supabase.co', 'SUPABASE_SERVICE_ROLE_KEY': 'test-key'})
-    @patch('core.storage.requests.post')
+    @patch('core.storage._session.post')
     def test_marketing_can_upload_image(self, mock_post):
         mock_post.side_effect = [
             Mock(status_code=200, text='{}'),  # bucket ensure
@@ -988,7 +988,7 @@ class ImageUploadViewTests(APITestCase):
 
     @patch('core.storage._bucket_ensured', False)
     @patch.dict('os.environ', {'SUPABASE_URL': 'https://test-project.supabase.co', 'SUPABASE_SERVICE_ROLE_KEY': 'test-key'})
-    @patch('core.storage.requests.post')
+    @patch('core.storage._session.post')
     def test_supabase_failure_returns_502(self, mock_post):
         mock_post.side_effect = [
             Mock(status_code=200, text='{}'),
@@ -1017,7 +1017,7 @@ class VideoUploadViewTests(APITestCase):
 
     @patch('core.storage._bucket_ensured', False)
     @patch.dict('os.environ', {'SUPABASE_URL': 'https://test-project.supabase.co', 'SUPABASE_SERVICE_ROLE_KEY': 'test-key'})
-    @patch('core.storage.requests.post')
+    @patch('core.storage._session.post')
     def test_marketing_can_upload_video(self, mock_post):
         mock_post.side_effect = [
             Mock(status_code=200, text='{}'),

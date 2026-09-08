@@ -198,7 +198,7 @@ export function AddEmployeeSheet({
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/*"
+                    accept=".png,.jpg,.jpeg,.webp,.gif"
                     onChange={handlePhotoChange}
                     className="hidden"
                   />
