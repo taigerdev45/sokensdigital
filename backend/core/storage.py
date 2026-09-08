@@ -220,6 +220,23 @@ PRIVATE_BUCKET_NAME = 'documents'
 # l'interface, trop court pour qu'un lien copié dans un e-mail reste utile.
 SIGNED_URL_TTL_SECONDS = 300
 
+# Type MIME deduit de l'extension, cote serveur. `UploadedFile.content_type`
+# est l'en-tete multipart envoye par le client : Django ne le valide pas et
+# ne le derive pas du contenu. Le repercuter tel quel vers Supabase laissait
+# televerser un fichier nomme « facture.pdf » — seule chose que verifie
+# FileExtensionValidator — annonce en text/html et contenant du script. Le
+# lien signe le servait alors en text/html, et le script s'executait sur
+# l'origine Supabase du projet.
+#
+# Les cles couvrent DOCUMENT_ATTACHMENT_ALLOWED_EXTENSIONS ; toute extension
+# hors de cette liste est deja rejetee en amont par le validateur.
+MIME_BY_EXTENSION = {
+    '.pdf': 'application/pdf',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+}
+
 _private_bucket_ensured = False
 
 
@@ -228,14 +245,41 @@ def _ensure_private_bucket() -> None:
     if _private_bucket_ensured:
         return
     url, key = _supabase_config()
-    requests.post(
+    headers = {'Authorization': f'Bearer {key}', 'apikey': key}
+
+    response = requests.post(
         f'{url}/storage/v1/bucket',
-        headers={'Authorization': f'Bearer {key}', 'apikey': key},
+        headers=headers,
         json={'name': PRIVATE_BUCKET_NAME, 'id': PRIVATE_BUCKET_NAME, 'public': False},
         timeout=15,
     )
-    # Un 400 « already exists » est le cas nominal au 2e appel : on ne
-    # distingue pas, la création est idempotente côté usage.
+
+    if response.status_code not in (200, 201):
+        # Un 400 « already exists » est le cas nominal au 2e appel. Mais un
+        # bucket preexistant n'est pas forcement prive : s'il a ete cree a la
+        # main ou par un autre outil avec public=true, tous les justificatifs
+        # comptables partiraient dans un bucket dont Supabase autorise
+        # l'enumeration sans authentification — les chemins en UUID ne
+        # protegent plus rien face a un listing. Rien dans l'application ne
+        # le signalerait : l'upload reussit, l'URL signee fonctionne.
+        # On verifie donc l'etat reel avant de continuer.
+        bucket = requests.get(
+            f'{url}/storage/v1/bucket/{PRIVATE_BUCKET_NAME}',
+            headers=headers,
+            timeout=15,
+        )
+        if bucket.status_code != 200:
+            raise RuntimeError(
+                f'Bucket {PRIVATE_BUCKET_NAME} introuvable et non creable : '
+                f'{response.text}'
+            )
+        if bucket.json().get('public'):
+            raise RuntimeError(
+                f'Le bucket {PRIVATE_BUCKET_NAME} est public. Refus de '
+                'stocker des pieces justificatives comptables dans un bucket '
+                'public : passez-le en prive dans Supabase avant de reessayer.'
+            )
+
     _private_bucket_ensured = True
 
 
@@ -280,7 +324,13 @@ class SupabasePrivateStorage(Storage):
             headers={
                 'Authorization': f'Bearer {key}',
                 'apikey': key,
-                'Content-Type': getattr(content, 'content_type', None) or 'application/octet-stream',
+                # Derive de l'extension, jamais de content.content_type :
+                # voir MIME_BY_EXTENSION.
+                'Content-Type': MIME_BY_EXTENSION.get(extension, 'application/octet-stream'),
+                # Interdit d'ecraser un objet existant. Les chemins sont des
+                # UUID donc la collision est theorique, mais l'ecrasement
+                # d'une piece comptable ne doit pas dependre de ca.
+                'x-upsert': 'false',
             },
             data=content.read(),
             timeout=60,
@@ -318,7 +368,11 @@ class SupabasePrivateStorage(Storage):
         response = requests.post(
             f'{url}/storage/v1/object/sign/{PRIVATE_BUCKET_NAME}/{name}',
             headers={'Authorization': f'Bearer {key}', 'apikey': key},
-            json={'expiresIn': SIGNED_URL_TTL_SECONDS},
+            # `download` fait repondre Supabase en Content-Disposition:
+            # attachment. Defense en profondeur derriere MIME_BY_EXTENSION :
+            # un fichier telecharge ne s'execute pas dans la page, meme si
+            # son type venait a etre errone.
+            json={'expiresIn': SIGNED_URL_TTL_SECONDS, 'download': True},
             timeout=15,
         )
         if response.status_code != 200:

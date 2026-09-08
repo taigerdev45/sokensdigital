@@ -35,8 +35,15 @@ logger = logging.getLogger(__name__)
 # ajouter un modèle au projet ne l'expose pas par accident.
 #
 # Clé : 'app_label.modelname' en minuscules (format ContentType).
+#
+# Le Caissier tient la caisse : il a les entrees/sorties especes et les
+# decaissements qu'il paie, pas la banque ni les versements clients. C'est
+# exactement le decoupage applique par l'endpoint `encaissements`
+# (finance/views.py), ou la banque et les versements sont reserves aux roles
+# finance. Lui donner ici les pieces de finance.payment aurait rouvert par
+# la bande ce que cet endpoint lui refuse.
 ATTACHABLE_MODELS = {
-    'finance.payment': [*FINANCE_ROLES, ROLE_COMPTABLE, ROLE_CAISSIER],
+    'finance.payment': [*FINANCE_ROLES, ROLE_COMPTABLE],
     'finance.invoice': [*FINANCE_ROLES, ROLE_COMPTABLE],
     'finance.quote': [*FINANCE_ROLES, ROLE_COMPTABLE],
     'treasury.cashentry': [*FINANCE_ROLES, ROLE_COMPTABLE, ROLE_CAISSIER],
@@ -118,7 +125,17 @@ class DocumentAttachmentViewSet(viewsets.ModelViewSet):
 
         # L'objet doit exister : sans cette vérification, l'endpoint accepte
         # des pièces orphelines rattachées à un identifiant inventé.
-        get_object_or_404(content_type.model_class(), pk=object_id)
+        #
+        # Les modèles cibles héritent de LoggedModel, dont la clé primaire
+        # est un UUID : un object_id malformé fait lever un ValidationError
+        # à la couche ORM, soit une 500 là où la requête est simplement
+        # invalide.
+        try:
+            get_object_or_404(content_type.model_class(), pk=object_id)
+        except (DjangoValidationError, ValueError):
+            raise serializers.ValidationError(
+                {'object_id': "L'identifiant fourni n'est pas valide."}
+            )
         return content_type, object_id, label
 
     def _assert_can_attach(self, label):
