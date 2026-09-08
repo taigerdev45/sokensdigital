@@ -96,7 +96,7 @@ export function DevisAcceptancePage({ token }: { token: string }) {
               <div className="space-y-6 px-8 py-6">
                 {quote.description && <p className="text-sm whitespace-pre-wrap text-neutral-700">{quote.description}</p>}
 
-                <div className="overflow-hidden rounded-xl border border-neutral-200">
+                <div className="overflow-x-auto rounded-xl border border-neutral-200">
                   <table className="w-full text-sm">
                     <thead className="bg-neutral-50 text-left text-xs text-neutral-500 uppercase">
                       <tr>

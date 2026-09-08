@@ -437,7 +437,7 @@ function SectionBody({ sectionKey, data, editing, setForm, items, updateItem, ad
             </div>
           </div>
           {(stats.length > 0 || editing) && (
-            <div className="mt-8 grid grid-cols-3 gap-4 border-t border-white/10 pt-6">
+            <div className="mt-8 grid grid-cols-1 gap-4 border-t border-white/10 pt-6 sm:grid-cols-3">
               {stats.map((stat, index) => (
                 <div key={index} className="group relative flex flex-col items-center gap-1">
                   {editing && <RemoveItemButton onClick={() => removeItem(index)} />}

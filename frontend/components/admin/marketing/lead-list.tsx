@@ -148,7 +148,7 @@ export function LeadList() {
         </Sheet>
       </div>
 
-      <div className="grid grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {LANE_ORDER.map((status, laneIndex) => {
           const laneLeads = leads.filter((lead) => lead.status === status);
           return (

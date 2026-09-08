@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  ChevronLeft,
   Building2,
   FileText,
   FolderKanban,
@@ -193,9 +194,23 @@ export function Chat() {
     await togglePinned(activeRoomId, message.id, !message.pinned, user.uid);
   }
 
+  // `dvh` et non `vh` : la barre d'URL mobile fausse `100vh`, ce qui faisait
+  // dépasser la messagerie sous la barre de navigation. La marge basse plus
+  // généreuse sous `lg` laisse la place à celle-ci.
   return (
-    <div className="flex h-[calc(100vh-8rem)] overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm">
-      <aside data-tour="module-messagerie" className="flex w-[312px] shrink-0 flex-col border-r border-neutral-200">
+    <div className="flex h-[calc(100dvh-12rem)] overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm lg:h-[calc(100dvh-8rem)]">
+      {/* Sous `lg`, liste et conversation ne tiennent pas côte à côte :
+          312px + 340px + les messages débordaient largement d'un écran de
+          téléphone, et la page ne s'affichait qu'au prix d'un dézoom. On
+          n'en montre donc qu'une à la fois, la liste cédant la place dès
+          qu'une conversation est ouverte. */}
+      <aside
+        data-tour="module-messagerie"
+        className={cn(
+          "flex-col border-r border-neutral-200 lg:flex lg:w-[312px] lg:shrink-0",
+          activeRoom ? "hidden" : "flex w-full"
+        )}
+      >
         <div className="shrink-0 p-4 pb-3">
           <div className="mb-4 flex items-center justify-between">
             <h1 className="text-lg font-bold text-neutral-900">Messagerie</h1>
@@ -278,10 +293,20 @@ export function Chat() {
         </div>
       </aside>
 
-      <div className="flex flex-1 flex-col bg-white">
+      <div className={cn("flex-1 flex-col bg-white lg:flex", activeRoom ? "flex" : "hidden lg:flex")}>
         {activeRoom ? (
           <>
-            <div className="flex shrink-0 items-center gap-3 border-b border-neutral-200 px-5 py-3">
+            <div className="flex shrink-0 items-center gap-3 border-b border-neutral-200 px-4 py-3 lg:px-5">
+              {/* Retour à la liste — le seul chemin de sortie sur mobile,
+                  où la liste n'est plus affichée à côté. */}
+              <button
+                type="button"
+                onClick={() => setActiveRoomId(null)}
+                aria-label="Retour aux conversations"
+                className="-ml-1 rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 lg:hidden"
+              >
+                <ChevronLeft className="size-5" />
+              </button>
               <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 {(() => {
                   const Icon = ROOM_TYPE_ICON[activeRoom.roomType];
@@ -343,7 +368,7 @@ export function Chat() {
               </Popover>
             </div>
 
-            <div className="flex flex-1 overflow-hidden">
+            <div className="relative flex flex-1 overflow-hidden">
               <div className="flex flex-1 flex-col overflow-hidden">
                 <div className="flex-1 space-y-1 overflow-y-auto px-5 py-4">
                   {rootMessages.map((message, index) => {
@@ -390,8 +415,10 @@ export function Chat() {
                 </div>
               </div>
 
+              {/* En dessous de `lg`, le fil se superpose au lieu de prendre
+                  une troisième colonne : il n'y a pas la largeur pour trois. */}
               {threadRoot && (
-                <aside className="flex w-[340px] shrink-0 flex-col border-l border-neutral-200 bg-neutral-50/50">
+                <aside className="absolute inset-0 z-20 flex flex-col border-l border-neutral-200 bg-neutral-50/50 lg:static lg:z-auto lg:w-[340px] lg:shrink-0">
                   <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 px-4 py-3">
                     <div>
                       <p className="text-sm font-semibold text-neutral-900">Fil de discussion</p>

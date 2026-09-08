@@ -61,7 +61,7 @@ export function ProjectGallery({ title, images, videoSrc }: Props) {
         </div>
 
         {!videoSrc && images && images.length > 1 && (
-          <div className="mt-3 grid grid-cols-4 gap-3">
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {images.map((url, i) => (
               <button
                 key={url}
@@ -97,7 +97,7 @@ export function ProjectGallery({ title, images, videoSrc }: Props) {
         })()}
       </div>
 
-      <div className="mt-3 grid grid-cols-4 gap-3">
+      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {VIEWS.map((view, i) => (
           <button
             key={view.key}

@@ -278,7 +278,7 @@ export function ProjectList() {
   }
 
   return (
-    <div className="relative isolate -mx-6 -mt-8 min-h-[calc(100vh-4rem)] lg:-mx-10">
+    <div className="relative isolate -mx-6 -mt-8 min-h-[calc(100dvh-4rem)] lg:-mx-10">
       <AmbientBackground />
 
       <div className="px-6 pt-8 lg:px-10">

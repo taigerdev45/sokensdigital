@@ -133,7 +133,7 @@ export function ClientFormModal({
             <input value={form.address ?? ""} onChange={(e) => set("address", e.target.value)} className={inputClass} />
           </label>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className="block">
               <span className={labelClass}>Ville</span>
               <input value={form.city ?? ""} onChange={(e) => set("city", e.target.value)} className={inputClass} />

@@ -131,7 +131,7 @@ export function Hero({ section }: { section?: PageSection | null }) {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.5 }}
           transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] as const }}
-          className="mx-auto grid max-w-5xl grid-cols-3 px-4 py-10 sm:px-6 lg:px-8"
+          className="mx-auto grid max-w-5xl grid-cols-1 gap-6 px-4 py-10 sm:grid-cols-3 sm:gap-0 sm:px-6 lg:px-8"
         >
           {stats.map((stat, i) => (
             <motion.div

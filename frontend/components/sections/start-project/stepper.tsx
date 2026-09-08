@@ -20,8 +20,12 @@ export function Stepper({ current }: { current: StepKey }) {
       {STAGES.map((stage, i) => {
         const status = i < currentIndex ? "done" : i === currentIndex ? "current" : "upcoming";
         return (
-          <div key={stage.key} className="flex flex-1 items-center last:flex-none">
-            <div className="flex flex-col items-center gap-2 text-center">
+          // `min-w-0` : sans lui, la largeur naturelle des libellés
+          // (« Logistique » en majuscules espacées) impose au conteneur une
+          // largeur minimale, et les quatre étapes débordaient l'écran sur
+          // les plus étroits — la page ne s'ouvrait qu'au prix d'un dézoom.
+          <div key={stage.key} className="flex min-w-0 flex-1 items-center last:flex-none">
+            <div className="flex min-w-0 flex-col items-center gap-2 text-center">
               <div
                 className={cn(
                   "flex size-10 shrink-0 items-center justify-center rounded-lg border transition-colors sm:size-11",
@@ -41,7 +45,9 @@ export function Stepper({ current }: { current: StepKey }) {
               </div>
               <span
                 className={cn(
-                  "text-[11px] font-semibold tracking-[0.1em] uppercase sm:text-xs",
+                  // L'interlettrage large est la moitié de l'encombrement
+                  // du libellé : on le réserve aux écrans qui l'absorbent.
+                  "text-[10px] font-semibold uppercase sm:text-xs sm:tracking-[0.1em]",
                   status === "upcoming" ? "text-muted-foreground" : "text-primary"
                 )}
               >
@@ -51,7 +57,7 @@ export function Stepper({ current }: { current: StepKey }) {
             {i < STAGES.length - 1 && (
               <div
                 className={cn(
-                  "mx-2 h-px flex-1 sm:mx-3",
+                  "mx-1 h-px min-w-2 flex-1 sm:mx-3",
                   status === "done" ? "bg-primary" : "bg-white/10"
                 )}
               />
